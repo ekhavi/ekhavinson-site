@@ -1,0 +1,46 @@
+name: Deploy site to S3 and CloudFront
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only (makes no changes to S3)"
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write   # lets the job request a short-lived AWS token (OIDC)
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Sync site to S3
+        env:
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          FLAGS=""
+          if [ "$DRY" = "true" ]; then FLAGS="--dryrun"; fi
+          aws s3 sync ./site s3://ekhavinson.dev --delete $FLAGS
+
+      - name: Invalidate CloudFront cache
+        if: ${{ inputs.dry_run != true }}
+        run: aws cloudfront create-invalidation --distribution-id E1OG2R2B0W9PBR --paths "/*"
