@@ -21,26 +21,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Read-only preview: manual runs with dry_run=true (the default). No environment
+  # gate, since this makes no changes — safe to run without approval.
+  preview:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Preview S3 sync (dry run, no changes)
+        run: aws s3 sync ./site s3://ekhavinson.dev --delete --dryrun
+
+  # Real deploy: triggered by a push to main, or a manual run with dry_run=false.
+  # Gated behind the "production" GitHub Environment — configure required
+  # reviewers on that environment in Settings > Environments so this step
+  # always needs manual approval before it can touch S3/CloudFront.
+  deploy:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false) }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Sync site to S3
-        env:
-          DRY: ${{ inputs.dry_run }}
-        run: |
-          FLAGS=""
-          if [ "$DRY" = "true" ]; then FLAGS="--dryrun"; fi
-          aws s3 sync ./site s3://ekhavinson.dev --delete $FLAGS
+        run: aws s3 sync ./site s3://ekhavinson.dev --delete
 
       - name: Invalidate CloudFront cache
-        if: ${{ inputs.dry_run != true }}
         run: aws cloudfront create-invalidation --distribution-id E1OG2R2B0W9PBR --paths "/*"
