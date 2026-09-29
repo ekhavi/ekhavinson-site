@@ -349,7 +349,86 @@
         <span class="tag-chip">Integration &amp; deployment guides</span>
       </div>
     </div>
-  
+
+    <div class="case">
+      <div class="case-top">
+        <div class="case-icon">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trust and approval gate schematic">
+            <rect class="icon-stroke-dim" x="4" y="26" width="16" height="16" rx="2"/>
+            <path class="icon-stroke" d="M24,34 L34,34" stroke-dasharray="3 3"/>
+            <path class="icon-stroke" d="M31,30 L35,34 L31,38"/>
+            <rect class="icon-stroke" x="38" y="22" width="22" height="24" rx="2"/>
+            <path class="icon-stroke" d="M45,22 L45,17 a4,4 0 0 1 8,0 L53,22"/>
+            <path class="icon-stroke" d="M45,35 L48,38 L54,31"/>
+          </svg>
+        </div>
+        <div class="case-head">
+          <h3>Hardening this site's own deploy pipeline</h3>
+          <span class="case-status">Completed, 2026</span>
+        </div>
+      </div>
+      <div class="case-meta"><span><b>Stack:</b> GitHub Actions → AWS IAM (OIDC) → S3 / CloudFront</span><span><b>Trigger:</b> push to main</span></div>
+      <p>This site deploys itself: a push to <code>main</code> runs a GitHub Actions workflow that federates into AWS via OIDC and syncs to S3 behind CloudFront — no long-lived AWS access keys stored anywhere. I treated making the repo public as a reason to actually audit that pipeline rather than just hope it held up, running a full-history secret scan and rebuilding the AWS side around scoped, short-lived trust instead of static credentials.</p>
+      <p>The OIDC trust policy took a few rounds to get right — GitHub's token subject format doesn't just encode the repo and branch, it also changes shape entirely once a job references a GitHub Environment. I traced both mismatches through the actual CloudTrail <code>AssumeRoleWithWebIdentity</code> events rather than guessing, then split the workflow into an ungated dry-run preview and a real deploy job gated behind a <code>production</code> Environment that requires a manual approval click before anything touches S3 or CloudFront.</p>
+      <p>Along the way I caught a quieter problem: GitHub Environments let repo admins bypass their own required-reviewer rule by default, which would have made the new approval gate a no-op for the only account that ever triggers a deploy. Turning that off, pinning every third-party Action to a commit SHA, and tightening branch protection were the guardrails that actually made the public repo, and the pipeline behind it, something I'd stand behind.</p>
+      <div class="whitebox-graphic">
+        <svg viewBox="0 0 940 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of the deploy pipeline: a local push reaches GitHub, triggers an Actions runner, which requests an OIDC-verified AWS identity, pauses for a required manual approval, then syncs to S3 and CloudFront">
+          <g>
+            <rect class="icon-stroke-dim" x="10" y="38" width="130" height="54" rx="3"/>
+            <rect class="icon-stroke-dim" x="16" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="29" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="42" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="55" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="68" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="81" y="76" width="8" height="6"/>
+            <circle class="icon-stroke-dim" cx="128" cy="47" r="2"/>
+          </g>
+          <path class="icon-stroke-dim" d="M143,65 L157,65" stroke-dasharray="3 3"/>
+          <path class="icon-stroke-dim" d="M154,61 L160,65 L154,69"/>
+          <g>
+            <rect class="icon-stroke-dim" x="170" y="38" width="130" height="54" rx="3"/>
+            <circle class="icon-stroke-dim" cx="205" cy="58" r="3"/>
+            <circle class="icon-stroke-dim" cx="205" cy="76" r="3"/>
+            <path class="icon-stroke-dim" d="M205,61 L205,73"/>
+            <path class="icon-stroke-dim" d="M208,58 L275,58"/>
+            <circle class="icon-dot" cx="278" cy="58" r="2.4"/>
+          </g>
+          <path class="icon-stroke-dim" d="M303,65 L317,65" stroke-dasharray="3 3"/>
+          <path class="icon-stroke-dim" d="M314,61 L320,65 L314,69"/>
+          <g>
+            <rect class="icon-stroke-dim" x="330" y="38" width="130" height="54" rx="3"/>
+            <rect class="icon-stroke-dim" x="336" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="349" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="362" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="375" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="388" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="401" y="76" width="8" height="6"/>
+            <circle class="icon-dot" cx="448" cy="47" r="2"/>
+          </g>
+          <path class="icon-stroke-dim" d="M463,65 L477,65" stroke-dasharray="3 3"/>
+          <path class="icon-stroke-dim" d="M474,61 L480,65 L474,69"/>
+          <g>
+            <rect class="icon-stroke" x="490" y="38" width="130" height="54" rx="3"/>
+            <path class="icon-stroke" d="M545,58 L545,53 a4,4 0 0 1 8,0 L553,58"/>
+            <rect class="icon-stroke" x="538" y="58" width="22" height="17" rx="1.5"/>
+            <circle class="icon-dot" cx="549" cy="66" r="1.6"/>
+          </g>
+          <path class="icon-stroke" d="M623,65 L637,65" stroke-dasharray="3 3"/>
+          <path class="icon-stroke" d="M634,61 L640,65 L634,69"/>
+          <g>
+            <rect class="icon-stroke" x="650" y="38" width="130" height="54" rx="3"/>
+            <path class="icon-stroke" d="M700,68 L712,80 L732,56"/>
+            <circle class="icon-dot" cx="768" cy="47" r="2"/>
+          </g>
+          <path class="icon-stroke-dim" d="M783,65 L797,65" stroke-dasharray="3 3"/>
+          <path class="icon-stroke-dim" d="M794,61 L800,65 L794,69"/>
+          <g>
+            <rect class="icon-stroke-dim" x="810" y="38" width="130" height="54" rx="3"/>
+            <circle class="icon-stroke-dim" cx="850" cy="65" r="14"/>
+            <circle class="icon-dot" cx="895" cy="53" r="4"/>
+            <circle class="icon-stroke-dim" cx="905" cy="65" r="6"/>
+          </g>
+        </svg>
+        <div class="whitebox-caption">Local push → GitHub → Actions runner → OIDC-verified AWS identity → required approval → S3 + CloudFront</div>
+      </div>
+      <div class="tags">
+        <span class="tag-chip">OIDC</span>
+        <span class="tag-chip">GitHub Actions</span>
+        <span class="tag-chip">AWS IAM</span>
+        <span class="tag-chip">CI/CD security</span>
+      </div>
+    </div>
+
     </div></section>
 
   <!-- CLI FLUENCY -->
