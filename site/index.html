@@ -363,69 +363,171 @@
           </svg>
         </div>
         <div class="case-head">
-          <h3>Hardening this site's own deploy pipeline</h3>
+          <h3>ekhavinson.dev: domain, hosting, and a hardened deploy pipeline</h3>
           <span class="case-status">Completed, 2026</span>
         </div>
       </div>
-      <div class="case-meta"><span><b>Stack:</b> GitHub Actions → AWS IAM (OIDC) → S3 / CloudFront</span><span><b>Trigger:</b> push to main</span></div>
-      <p>This site deploys itself: a push to <code>main</code> runs a GitHub Actions workflow that federates into AWS via OIDC and syncs to S3 behind CloudFront — no long-lived AWS access keys stored anywhere. I treated making the repo public as a reason to actually audit that pipeline rather than just hope it held up, running a full-history secret scan and rebuilding the AWS side around scoped, short-lived trust instead of static credentials.</p>
+      <div class="case-meta"><span><b>Domain:</b> Route 53</span><span><b>Hosting:</b> S3 + CloudFront + ACM</span><span><b>CI/CD:</b> GitHub Actions + OIDC</span></div>
+      <p>This site is end-to-end my own infrastructure, not just a repo of HTML. The domain is registered and resolved through Route 53; a public ACM certificate, validated by DNS, gives it TLS; CloudFront terminates that TLS and serves the site from a private S3 bucket that isn't reachable directly. Nothing here is a tutorial copy-paste — the DNS validation records, the origin access policy limiting S3 to CloudFront only, and the certificate region requirement (ACM certs for CloudFront have to live in us-east-1 regardless of where everything else sits) all came from working through the actual failure modes.</p>
+      <p>Security testing came before making any of this public: a full-history <code>gitleaks</code> scan of the repo to make sure nothing had ever leaked (it hadn't), GitHub's own secret scanning and push protection turned on going forward, and an S3 bucket policy scoped so only the CloudFront distribution's origin access control can read it — the bucket itself has no public access at all.</p>
+      <p>On top of that sits the deploy pipeline: a push to <code>main</code> runs a GitHub Actions workflow that federates into AWS via OIDC and syncs to S3 behind CloudFront — no long-lived AWS access keys stored anywhere. I treated making the repo public as a reason to actually audit that pipeline rather than just hope it held up, rebuilding the AWS side around scoped, short-lived trust instead of static credentials.</p>
       <p>The OIDC trust policy took a few rounds to get right — GitHub's token subject format doesn't just encode the repo and branch, it also changes shape entirely once a job references a GitHub Environment. I traced both mismatches through the actual CloudTrail <code>AssumeRoleWithWebIdentity</code> events rather than guessing, then split the workflow into an ungated dry-run preview and a real deploy job gated behind a <code>production</code> Environment that requires a manual approval click before anything touches S3 or CloudFront.</p>
       <p>Along the way I caught a quieter problem: GitHub Environments let repo admins bypass their own required-reviewer rule by default, which would have made the new approval gate a no-op for the only account that ever triggers a deploy. Turning that off, pinning every third-party Action to a commit SHA, and tightening branch protection were the guardrails that actually made the public repo, and the pipeline behind it, something I'd stand behind.</p>
-      <div class="whitebox-graphic">
-        <svg viewBox="0 0 940 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of the deploy pipeline: a local push reaches GitHub, triggers an Actions runner, which requests an OIDC-verified AWS identity, pauses for a required manual approval, then syncs to S3 and CloudFront">
-          <g>
-            <rect class="icon-stroke-dim" x="10" y="38" width="130" height="54" rx="3"/>
-            <rect class="icon-stroke-dim" x="16" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="29" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="42" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="55" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="68" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="81" y="76" width="8" height="6"/>
-            <circle class="icon-stroke-dim" cx="128" cy="47" r="2"/>
+      <div class="diagram-scroll">
+        <svg viewBox="0 0 1040 500" width="1040" height="500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture diagram: a visitor resolves ekhavinson.dev through Route 53, which points to CloudFront; CloudFront terminates TLS and fetches from a private S3 origin on a cache miss. Separately, a local push to the GitHub repo triggers an Actions runner, which waits at a production Environment approval gate; once a reviewer approves, the runner requests an OIDC token, IAM validates it and logs the AssumeRoleWithWebIdentity call to CloudTrail, then uses the temporary credentials to sync S3 and invalidate CloudFront.">
+          <defs>
+            <marker id="work-arrow-m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+            </marker>
+            <marker id="work-arrow-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#facc15"/>
+            </marker>
+          </defs>
+
+          <rect x="30" y="150" width="560" height="330" rx="10" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+          <rect x="50" y="160" width="164" height="24" rx="4" fill="var(--bg-panel-2)" stroke="var(--line)"/>
+          <text x="62" y="176" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">AWS · us-east-1</text>
+
+          <rect x="630" y="150" width="380" height="330" rx="10" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+          <rect x="650" y="160" width="84" height="24" rx="4" fill="var(--bg-panel-2)" stroke="var(--line)"/>
+          <text x="662" y="176" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">GitHub</text>
+
+          <g stroke="var(--muted)" stroke-width="1.6" fill="none">
+            <line x1="96" y1="58" x2="200" y2="58" marker-end="url(#work-arrow-m)"/>
+            <line x1="256" y1="58" x2="400" y2="58" marker-end="url(#work-arrow-m)"/>
+            <line x1="428" y1="86" x2="118" y2="205" marker-end="url(#work-arrow-m)"/>
+            <line x1="788" y1="86" x2="788" y2="195" marker-end="url(#work-arrow-m)"/>
+            <line x1="788" y1="251" x2="788" y2="290" marker-end="url(#work-arrow-m)"/>
+            <path d="M368,205 Q400,145 428,86" marker-end="url(#work-arrow-m)"/>
+            <path d="M368,261 Q300,315 238,345" marker-end="url(#work-arrow-m)"/>
+            <line x1="340" y1="233" x2="146" y2="233" marker-end="url(#work-arrow-m)"/>
           </g>
-          <path class="icon-stroke-dim" d="M143,65 L157,65" stroke-dasharray="3 3"/>
-          <path class="icon-stroke-dim" d="M154,61 L160,65 L154,69"/>
-          <g>
-            <rect class="icon-stroke-dim" x="170" y="38" width="130" height="54" rx="3"/>
-            <circle class="icon-stroke-dim" cx="205" cy="58" r="3"/>
-            <circle class="icon-stroke-dim" cx="205" cy="76" r="3"/>
-            <path class="icon-stroke-dim" d="M205,61 L205,73"/>
-            <path class="icon-stroke-dim" d="M208,58 L275,58"/>
-            <circle class="icon-dot" cx="278" cy="58" r="2.4"/>
+          <g stroke="#facc15" stroke-width="1.8" fill="none">
+            <line x1="788" y1="346" x2="788" y2="385" marker-end="url(#work-arrow-g)"/>
+            <path d="M788,413 Q560,335 368,233" marker-end="url(#work-arrow-g)"/>
           </g>
-          <path class="icon-stroke-dim" d="M303,65 L317,65" stroke-dasharray="3 3"/>
-          <path class="icon-stroke-dim" d="M314,61 L320,65 L314,69"/>
-          <g>
-            <rect class="icon-stroke-dim" x="330" y="38" width="130" height="54" rx="3"/>
-            <rect class="icon-stroke-dim" x="336" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="349" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="362" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="375" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="388" y="76" width="8" height="6"/><rect class="icon-stroke-dim" x="401" y="76" width="8" height="6"/>
-            <circle class="icon-dot" cx="448" cy="47" r="2"/>
+
+          <g font-family="var(--sans)" font-size="10.5" text-anchor="middle" fill="var(--muted)">
+            <rect x="112" y="41" width="72" height="15" fill="var(--bg)"/><text x="148" y="52">DNS query</text>
+            <rect x="284" y="41" width="80" height="15" fill="var(--bg)"/><text x="328" y="52">ALIAS record</text>
+            <rect x="220" y="132" width="140" height="15" fill="var(--bg)"/><text x="290" y="143">origin fetch (cache miss)</text>
+            <rect x="243" y="300" width="180" height="15" fill="var(--bg)"/><text x="333" y="311">log AssumeRoleWithWebIdentity</text>
+            <rect x="188" y="216" width="90" height="15" fill="var(--bg)"/><text x="233" y="227">sync --delete</text>
+            <rect x="392" y="130" width="86" height="15" fill="var(--bg)"/><text x="435" y="141">invalidate /*</text>
           </g>
-          <path class="icon-stroke-dim" d="M463,65 L477,65" stroke-dasharray="3 3"/>
-          <path class="icon-stroke-dim" d="M474,61 L480,65 L474,69"/>
-          <g>
-            <rect class="icon-stroke" x="490" y="38" width="130" height="54" rx="3"/>
-            <path class="icon-stroke" d="M545,58 L545,53 a4,4 0 0 1 8,0 L553,58"/>
-            <rect class="icon-stroke" x="538" y="58" width="22" height="17" rx="1.5"/>
-            <circle class="icon-dot" cx="549" cy="66" r="1.6"/>
+          <g font-family="var(--sans)" font-size="10.5" text-anchor="middle" fill="#facc15">
+            <rect x="520" y="310" width="150" height="15" fill="var(--bg)"/><text x="595" y="321">approved → OIDC token</text>
           </g>
-          <path class="icon-stroke" d="M623,65 L637,65" stroke-dasharray="3 3"/>
-          <path class="icon-stroke" d="M634,61 L640,65 L634,69"/>
-          <g>
-            <rect class="icon-stroke" x="650" y="38" width="130" height="54" rx="3"/>
-            <path class="icon-stroke" d="M700,68 L712,80 L732,56"/>
-            <circle class="icon-dot" cx="768" cy="47" r="2"/>
+
+          <g transform="translate(40,30)">
+            <circle cx="28" cy="28" r="27" fill="#3a4152"/>
+            <rect x="12" y="14" width="32" height="22" rx="2" fill="none" stroke="#e7e9ee" stroke-width="2"/>
+            <line x1="28" y1="36" x2="28" y2="42" stroke="#e7e9ee" stroke-width="2"/>
+            <line x1="20" y1="42" x2="36" y2="42" stroke="#e7e9ee" stroke-width="2"/>
           </g>
-          <path class="icon-stroke-dim" d="M783,65 L797,65" stroke-dasharray="3 3"/>
-          <path class="icon-stroke-dim" d="M794,61 L800,65 L794,69"/>
-          <g>
-            <rect class="icon-stroke-dim" x="810" y="38" width="130" height="54" rx="3"/>
-            <circle class="icon-stroke-dim" cx="850" cy="65" r="14"/>
-            <circle class="icon-dot" cx="895" cy="53" r="4"/>
-            <circle class="icon-stroke-dim" cx="905" cy="65" r="6"/>
+          <text x="68" y="102" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">Visitor</text>
+          <text x="68" y="116" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">browser</text>
+
+          <g transform="translate(200,30)">
+            <circle cx="28" cy="28" r="27" fill="#7c5cff"/>
+            <circle cx="28" cy="28" r="12" fill="none" stroke="#fff" stroke-width="2"/>
+            <ellipse cx="28" cy="28" rx="5.5" ry="12" fill="none" stroke="#fff" stroke-width="1.6"/>
+            <line x1="16" y1="28" x2="40" y2="28" stroke="#fff" stroke-width="1.6"/>
           </g>
+          <text x="228" y="102" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">Route 53</text>
+          <text x="228" y="116" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">DNS</text>
+
+          <g transform="translate(400,30)">
+            <circle cx="28" cy="28" r="27" fill="#7c5cff"/>
+            <path d="M16,32 a7,7 0 0 1 2,-13.6 a9,9 0 0 1 17,3.6 a6,6 0 0 1 -1,13 z" fill="none" stroke="#fff" stroke-width="2"/>
+            <circle cx="17" cy="20" r="1.6" fill="#fff"/>
+            <circle cx="39" cy="20" r="1.6" fill="#fff"/>
+          </g>
+          <text x="428" y="102" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">CloudFront</text>
+          <text x="428" y="116" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">CDN + TLS (ACM)</text>
+
+          <g transform="translate(760,30)">
+            <circle cx="28" cy="28" r="27" fill="#2dd4bf"/>
+            <rect x="14" y="16" width="28" height="18" rx="2" fill="none" stroke="#0b1220" stroke-width="2"/>
+            <path d="M10,40 L46,40" stroke="#0b1220" stroke-width="2"/>
+          </g>
+          <rect x="718" y="90" width="140" height="32" fill="var(--bg)"/>
+          <text x="788" y="102" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">Local machine</text>
+          <text x="788" y="116" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">git push</text>
+
+          <g transform="translate(90,205)">
+            <circle cx="28" cy="28" r="27" fill="#10b981"/>
+            <path d="M15,18 a13,4 0 0 1 26,0 L38,38 a13,4 0 0 1 -20,0 Z" fill="none" stroke="#fff" stroke-width="2"/>
+            <path d="M15,18 a13,4 0 0 0 26,0" fill="none" stroke="#fff" stroke-width="2"/>
+          </g>
+          <text x="118" y="277" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">S3 bucket</text>
+          <text x="118" y="291" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">private origin</text>
+
+          <g transform="translate(340,205)">
+            <circle cx="28" cy="28" r="27" fill="#fb5a7e"/>
+            <rect x="18" y="27" width="20" height="15" rx="2" fill="none" stroke="#fff" stroke-width="2"/>
+            <path d="M21,27 L21,20 a7,7 0 0 1 14,0 L35,27" fill="none" stroke="#fff" stroke-width="2"/>
+          </g>
+          <text x="368" y="277" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">IAM</text>
+          <text x="368" y="291" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">OIDC trust role</text>
+
+          <g transform="translate(210,345)">
+            <circle cx="28" cy="28" r="27" fill="#f5a524"/>
+            <line x1="16" y1="20" x2="40" y2="20" stroke="#fff" stroke-width="2"/>
+            <line x1="16" y1="28" x2="40" y2="28" stroke="#fff" stroke-width="2"/>
+            <line x1="16" y1="36" x2="32" y2="36" stroke="#fff" stroke-width="2"/>
+          </g>
+          <text x="238" y="417" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">CloudTrail</text>
+          <text x="238" y="431" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">audit log</text>
+
+          <g transform="translate(760,195)">
+            <circle cx="28" cy="28" r="27" fill="#2dd4bf"/>
+            <circle cx="20" cy="18" r="3.4" fill="none" stroke="#0b1220" stroke-width="2"/>
+            <circle cx="20" cy="38" r="3.4" fill="none" stroke="#0b1220" stroke-width="2"/>
+            <circle cx="36" cy="28" r="3.4" fill="none" stroke="#0b1220" stroke-width="2"/>
+            <path d="M20,21.4 L20,34.6" stroke="#0b1220" stroke-width="2" fill="none"/>
+            <path d="M23,26 Q30,26 32.7,27" stroke="#0b1220" stroke-width="2" fill="none"/>
+          </g>
+          <rect x="718" y="255" width="140" height="32" fill="var(--bg)"/>
+          <text x="788" y="267" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">Repo: main</text>
+          <text x="788" y="281" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">branch protected</text>
+
+          <g transform="translate(760,290)">
+            <circle cx="28" cy="28" r="27" fill="#2dd4bf"/>
+            <circle cx="28" cy="28" r="8" fill="none" stroke="#0b1220" stroke-width="2"/>
+            <g stroke="#0b1220" stroke-width="2">
+              <line x1="28" y1="14" x2="28" y2="10"/>
+              <line x1="28" y1="42" x2="28" y2="46"/>
+              <line x1="14" y1="28" x2="10" y2="28"/>
+              <line x1="42" y1="28" x2="46" y2="28"/>
+              <line x1="18" y1="18" x2="15" y2="15"/>
+              <line x1="38" y1="38" x2="41" y2="41"/>
+              <line x1="38" y1="18" x2="41" y2="15"/>
+              <line x1="18" y1="38" x2="15" y2="41"/>
+            </g>
+          </g>
+          <rect x="700" y="350" width="176" height="32" fill="var(--bg)"/>
+          <text x="788" y="362" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">Actions runner</text>
+          <text x="788" y="376" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">actions pinned by SHA</text>
+
+          <g transform="translate(760,385)">
+            <circle cx="28" cy="28" r="27" fill="#facc15"/>
+            <path d="M28,12 L42,17 L42,28 a14,14 0 0 1 -14,13 a14,14 0 0 1 -14,-13 L14,17 Z" fill="none" stroke="#3a2e00" stroke-width="2"/>
+            <path d="M20,27 L26,33 L37,20" fill="none" stroke="#3a2e00" stroke-width="2.4"/>
+          </g>
+          <text x="788" y="457" text-anchor="middle" font-family="var(--mono)" font-size="12" font-weight="600" fill="var(--text)">production</text>
+          <text x="788" y="471" text-anchor="middle" font-family="var(--sans)" font-size="10" fill="var(--muted)">required reviewer</text>
         </svg>
-        <div class="whitebox-caption">Local push → GitHub → Actions runner → OIDC-verified AWS identity → required approval → S3 + CloudFront</div>
       </div>
+      <div class="diagram-hint">← scroll to see the full diagram →</div>
+      <div class="whitebox-caption">Route 53 → ACM → CloudFront → S3 (hosting), and GitHub → OIDC → approval gate → S3 + CloudFront (deploy) — <span style="color:#7c5cff">networking</span>, <span style="color:#10b981">storage</span>, <span style="color:#fb5a7e">identity</span>, <span style="color:#f5a524">audit</span>, <span style="color:#facc15">approval</span>, <span style="color:#2dd4bf">CI</span></div>
       <div class="tags">
+        <span class="tag-chip">Route 53</span>
+        <span class="tag-chip">ACM / TLS</span>
+        <span class="tag-chip">S3 + CloudFront</span>
         <span class="tag-chip">OIDC</span>
         <span class="tag-chip">GitHub Actions</span>
-        <span class="tag-chip">AWS IAM</span>
-        <span class="tag-chip">CI/CD security</span>
+        <span class="tag-chip">Secret scanning</span>
       </div>
     </div>
 

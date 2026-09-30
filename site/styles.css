@@ -499,6 +499,17 @@
   .whitebox-graphic svg{width:100%; height:auto; display:block;}
   .whitebox-caption{font-family:var(--sans); font-size:12px; color:var(--muted-dim); margin-top:8px;}
 
+  .diagram-scroll{
+    background:var(--bg-panel); border:1px solid var(--line); border-top:2px solid var(--accent);
+    padding:14px 18px 10px; margin:4px 0 8px 0;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+  }
+  .diagram-scroll svg{display:block; height:auto;}
+  .diagram-hint{
+    font-family:var(--mono); font-size:11px; color:var(--muted-dim);
+    margin:0 0 20px 0; letter-spacing:.02em;
+  }
+
   /* ---------- Footer / contact ---------- */
   .contact-panel{
     background:var(--bg-panel); border:1px solid var(--line); border-top:2px solid var(--accent);
